@@ -1,7 +1,4 @@
-import re
-from collections import Counter
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from inference import run_inference, code_to_title
 
 def build_prompt(prompt_dict, options, add_generation_prompt=True):
     """Build prompt - define this ONCE outside the function"""
@@ -30,3 +27,42 @@ def build_prompt(prompt_dict, options, add_generation_prompt=True):
         prompt += "\n[assistant]"
 
     return prompt
+
+def evaluate_model_performance(prediction, ground_truth):
+    """
+    This function will evaluate the predicted diagnosis against the ground truth.
+    It prompts an LLM to act as a judge to decide the correctness and quality of the prediction.
+    """
+
+    # Define the evaluation task and prompt for the LLM
+    prompt = f"""
+    You are an expert medical coding assistant and your task is to evaluate the quality of ICD-9 code predictions.
+    
+    Here is the prediction and the ground truth for a medical case:
+
+    Predicted Diagnosis: {prediction['predicted_diagnosis']}
+    Ground Truth Diagnosis: {prediction['ground_truth']}
+    
+    Task: 
+    1. Check if the predicted diagnosis (ICD-9 code) matches the ground truth diagnosis code.
+    2. Evaluate whether the predicted ICD-9 code is appropriate for the medical note (given the context).
+    3. Consider the precision of the diagnosis and whether the generated code accurately reflects the condition described.
+
+    Please provide a brief response with your evaluation of the prediction:
+    - Is the predicted code correct? (Yes/No)
+    - If the predicted code is incorrect, what is the correct ICD-9 code?
+    - Is the description relevant to the ICD-9 code? (Yes/No)
+    - If the description is incorrect, provide a better description.
+
+    Please also provide a score from 0 to 1 based on the correctness of the predicted diagnosis:
+    0 means totally incorrect, 1 means completely correct.
+    """
+
+    # Call the model with the evaluation prompt and get the response
+    evaluation_result = run_inference({
+        "prompt": prompt,
+        "ground_truth": ground_truth,
+        "note": "" 
+    }, code_to_title)
+
+    return evaluation_result

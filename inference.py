@@ -4,15 +4,45 @@ import os
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import build_prompt
+
 import json
 from tqdm import tqdm
 
+
+def build_prompt(prompt_dict, options, add_generation_prompt=True):
+    """Build prompt - define this ONCE outside the function"""
+    prompt_text = prompt_dict["prompt"]
+    parts = []
+
+    system_message = (
+        "You are a medical coding assistant. Your task is to assign the most appropriate ICD-9 code to the medical note below."
+        "Read the note carefully and respond with only one ICD-9 code from the list."
+    )
+    parts.append(f"[system] {system_message}")
+    parts.append(f"[user]")
+    parts.append(f"Possible ICD-9 codes:: \n")
+    for k,v in options.items():
+        parts.append(f"{k}: {v}")
+    parts.append(f"Medical Note: \n")
+    parts.append("------------------------")
+    parts.append(prompt_text)
+    parts.append("------------------------")
+    parts.append("Respond with only the ICD-9 code. Do not include the title or explanation.")
+
+
+    prompt = "\n".join(parts)
+
+    if add_generation_prompt:
+        prompt += "\n[assistant]"
+
+    return prompt
+
 # google/medgemma-4b-it
+# Kavyaah/medical-coding-llm
 # unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
+    model_name = "google/medgemma-4b-it",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
@@ -54,7 +84,7 @@ def run_inference(prompt_dict, options):
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=50,  # Even shorter for classification
+                max_new_tokens=10, 
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 do_sample=False,
@@ -118,10 +148,10 @@ plt.figure(figsize=(5, 5))
 plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
 plt.axis('equal')
 plt.title('Proportion of Dropped vs Not Dropped Rows')
-plt.show()
+plt.savefig("DroppedPie.png")
 
 
-df_sampled = df_copy.sample(n=1312, random_state=42) # Added random_state for reproducibility
+df_sampled = df_copy.sample(n=1312, random_state=42) # Shuffle
 print(df_sampled.head())
 
 unique_pairs = df[['ICD9 Diagnosis', 'SHORT_TITLE']].drop_duplicates()
@@ -155,5 +185,5 @@ for i in tqdm(range(len(classification_prompts))):
     obj["ground_truth"] = prompt["ground_truth"]
     results.append(obj)
 
-with open("Llama-3.1-8B-Instruct.json", "w") as f:
+with open("MedGemma.json", "w") as f:
     json.dump(results, f)
