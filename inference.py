@@ -7,19 +7,25 @@ import matplotlib.pyplot as plt
 from utils import build_prompt
 import json
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # google/medgemma-4b-it
 # Kavyaah/medical-coding-llm
 # unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "google/medgemma-4b-it",
+    model_name = "haohao12/qwen2.5-7b-medical",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
     full_finetuning = False,
+     # let accelerate/transformers decide placement and use low_cpu_mem_usage
     device_map = "auto",
+    low_cpu_mem_usage = True,
     offload_folder = os.path.join(os.getcwd(), "offload"),
+    token=os.getenv("HF_TOKEN")
 )
 
 FastLanguageModel.for_inference(model)
@@ -156,5 +162,5 @@ for i in tqdm(range(len(classification_prompts))):
     obj["ground_truth"] = prompt["ground_truth"]
     results.append(obj)
 
-with open("MedGemma.json", "w") as f:
+with open("Qwen-2.5-7b-Medical.json", "w") as f:
     json.dump(results, f)

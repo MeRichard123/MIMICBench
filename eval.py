@@ -6,15 +6,16 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 import seaborn as sns
-import tqdm
+from tqdm import tqdm
 from utils import build_eval_prompt
 from unsloth import FastLanguageModel
 import torch
 import pandas as pd
+from bert_score import score as bert_score
 
 
 BASE_DIR = "/workspaces/CMP9794-Advanced-Artificial-Intelligence/Results/"
-MODEL = "MedGemma"
+MODEL = "Qwen-2.5-7b-Medical"
 
 df = pd.read_csv("/workspaces/CMP9794-Advanced-Artificial-Intelligence/MIMIC-SAMPLED.csv")
 null_rows = df[df.isnull().any(axis=1)]
@@ -110,17 +111,23 @@ with open(os.path.join(BASE_DIR, MODEL + ".json")) as fp:
     classes = sorted(set(ground_truth))
     cm = confusion_matrix(ground_truth, predicted, labels=classes)
 
+    P, R, F1 = bert_score(list(predicted), list(ground_truth), lang="en", rescale_with_baseline=True)
+
     scores = []
-    for pred, ground in tqdm(zip(predicted, ground_truth)):
-        if pred == "N/A":
-            continue
-        llm_as_judge = LLM_as_Judge(pred, ground)
-        match = re.search(r"Score\s*:\s*(\d+)", llm_as_judge)
-        if match:
-            score = int(match.group(1))
-            scores.append(score)
-        else:
-            scores.append(0)
+    # for idx in tqdm(range(len(list(zip(predicted, ground_truth))))):
+    #     pred, ground = list(zip(predicted, ground_truth))[idx]
+    #     if pred == "N/A":
+    #         continue
+    #     if len(pred) < 3:
+    #         scores.append(0)
+    #         continue
+    #     llm_as_judge = LLM_as_Judge(pred, ground)
+    #     match = re.search(r"Score\s*:\s*(\d+)", llm_as_judge)
+    #     if match:
+    #         score = int(match.group(1))
+    #         scores.append(score)
+    #     else:
+    #         scores.append(0)
 
     # Print metrics
     print(f"Accuracy: {accuracy:.4f}")
@@ -129,6 +136,7 @@ with open(os.path.join(BASE_DIR, MODEL + ".json")) as fp:
     print(f"F1 Score: {f1:.4f}")
     print(f"Balanced Accuracy: {balanced_accuracy:.4f}")
     print(f"Average LLM Judge Score: {np.mean(scores):.4f}")
+    print(f"BERTScore Precision: {P.mean():.4f}, Recall: {R.mean():.4f}, F1: {F1.mean():.4f}")
     
     plt.figure(figsize=(12, 8))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=classes, yticklabels=classes)

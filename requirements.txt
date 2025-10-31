@@ -1,2 +1,4 @@
 unsloth
 seaborn
+bert-score
+dotenv
