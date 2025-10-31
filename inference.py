@@ -4,7 +4,7 @@ import os
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import build_prompt
+from utils import build_classification_prompt
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -14,6 +14,10 @@ load_dotenv()
 # google/medgemma-4b-it
 # Kavyaah/medical-coding-llm
 # unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
+# haohao12/qwen2.5-7b-medical
+
+TASK = "classification"
+MODEL = "Qwen2.5-7b-Medical"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name = "haohao12/qwen2.5-7b-medical",
@@ -38,7 +42,10 @@ def run_inference(prompt_dict, options):
     # Get device from model (don't reassign device)
     device = next(model.parameters()).device
 
-    prompt = build_prompt(prompt_dict, options, add_generation_prompt=True)
+    if TASK == "classification":
+        prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
+    else:
+        raise ValueError(f"Unknown TASK: {TASK}")
 
     # Tokenize
     inputs = tokenizer(
@@ -162,5 +169,5 @@ for i in tqdm(range(len(classification_prompts))):
     obj["ground_truth"] = prompt["ground_truth"]
     results.append(obj)
 
-with open("Qwen-2.5-7b-Medical.json", "w") as f:
+with open(f"{MODEL}-{TASK}.json", "w") as f:
     json.dump(results, f)
