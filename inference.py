@@ -4,7 +4,7 @@ import os
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import build_classification_prompt
+from utils import build_classification_prompt, build_QA_prompt
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -14,18 +14,19 @@ load_dotenv()
 # google/medgemma-4b-it
 # Kavyaah/medical-coding-llm
 # unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
+# unsloth/Meta-Llama-3.1-8B-bnb-4bit
 # haohao12/qwen2.5-7b-medical
+# epfl-llm/meditron-7b
 
-TASK = "classification"
+TASK = "qa"
 MODEL = "Qwen2.5-7b-Medical"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "haohao12/qwen2.5-7b-medical",
+    model_name = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
     full_finetuning = False,
-     # let accelerate/transformers decide placement and use low_cpu_mem_usage
     device_map = "auto",
     low_cpu_mem_usage = True,
     offload_folder = os.path.join(os.getcwd(), "offload"),
@@ -44,9 +45,11 @@ def run_inference(prompt_dict, options):
 
     if TASK == "classification":
         prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
+    elif TASK == "qa":
+        prompt = build_QA_prompt(prompt_dict, options)
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
-
+    
     # Tokenize
     inputs = tokenizer(
         prompt,
@@ -165,9 +168,11 @@ for i in tqdm(range(len(classification_prompts))):
     prompt = classification_prompts[i]
     obj = {}
     inference = run_inference(prompt, code_to_title)
+  
     obj["predicted_diagnosis"] = inference
     obj["ground_truth"] = prompt["ground_truth"]
     results.append(obj)
+
 
 with open(f"{MODEL}-{TASK}.json", "w") as f:
     json.dump(results, f)
