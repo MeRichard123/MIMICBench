@@ -1,5 +1,5 @@
 import pandas as pd
-from abc import ABC
+from abc import ABC, abstractmethod
 import os
 from unsloth import FastLanguageModel
 import torch
@@ -76,12 +76,17 @@ class Evaluator(ABC):
         except Exception as e:
             print(f"Model generation failed: {e}")
             return None
-        
-    def extract_icd9_code(result):
+    
+    @classmethod
+    def extract_icd9_code(cls, result):
         if "Code:" in result:
             result = result.split("Code:")[-1]
         match = re.search(r"\b[A-Z]\d{1,3}\.?[A-Z0-9]*\b", result)
         return match.group(0).strip() if match else result.strip()
+    
+    @abstractmethod
+    def evaluate(self, ground_truth, predictions):
+        return
 
     
 

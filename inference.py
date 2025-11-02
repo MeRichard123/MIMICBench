@@ -11,18 +11,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# unsloth/Meta-Llama-3.1-8B-bnb-4bit
+# unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
 # google/medgemma-4b-it
 # Kavyaah/medical-coding-llm
-# unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit
-# unsloth/Meta-Llama-3.1-8B-bnb-4bit
-# haohao12/qwen2.5-7b-medical
 # epfl-llm/meditron-7b
+# haohao12/qwen2.5-7b-medical
 
-TASK = "qa"
-MODEL = "Qwen2.5-7b-Medical"
+TASK = "classification"
+MODEL = "medgemma-4b-it"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
+    model_name = "google/medgemma-4b-it",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
@@ -30,7 +30,7 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     device_map = "auto",
     low_cpu_mem_usage = True,
     offload_folder = os.path.join(os.getcwd(), "offload"),
-    token=os.getenv("HF_TOKEN")
+    # token=os.getenv("HF_TOKEN")
 )
 
 FastLanguageModel.for_inference(model)
@@ -43,14 +43,16 @@ def run_inference(prompt_dict, options):
     # Get device from model (don't reassign device)
     device = next(model.parameters()).device
 
+    # Build prompt defensively
+
     if TASK == "classification":
         prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
     elif TASK == "qa":
         prompt = build_QA_prompt(prompt_dict, options)
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
-    
-    # Tokenize
+
+
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
@@ -100,12 +102,6 @@ def run_inference(prompt_dict, options):
     except Exception as e:
         print(f"Model generation failed: {e}")
         return None
-
-def cleanup_memory():
-    """Call this between batches if needed"""
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    gc.collect()
 
 
 df = pd.read_csv("/workspaces/CMP9794-Advanced-Artificial-Intelligence/MIMIC-SAMPLED.csv")
@@ -168,7 +164,6 @@ for i in tqdm(range(len(classification_prompts))):
     prompt = classification_prompts[i]
     obj = {}
     inference = run_inference(prompt, code_to_title)
-  
     obj["predicted_diagnosis"] = inference
     obj["ground_truth"] = prompt["ground_truth"]
     results.append(obj)

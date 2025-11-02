@@ -1,23 +1,55 @@
-import os, json
+import os, json, sys
 import numpy as np
 from Evaluation.ClassificationEvaluator import ClassificationEvaluator
+from Evaluation.QAEvaluator import QAEvaluator
 
+shift = lambda args: args[1:]
+
+def parse_QA_reponse(text):
+    if ')' in text: # contains a repsonse in the form a) 
+        remove_option = text.split(")")[1]
+        if ':' in remove_option:
+            return remove_option.split(":")[0]
+        else:
+            return remove_option
+    return text
 
 BASE_DIR = "/workspaces/CMP9794-Advanced-Artificial-Intelligence/Results/"
-MODEL = "Qwen-2.5-7b-Medical"
+MODEL = "meditron-7b"
 
-# Eval as Classification
-
-with open(os.path.join(BASE_DIR, MODEL + ".json")) as fp:
-    parse = json.load(fp)
-
-    predictions = np.array([data['predicted_diagnosis'] for data in parse])
-
-    ground_truth = np.array([data['ground_truth'].strip() for data in parse])
-    predicted = [p if p else "N/A" for p in predictions]
-
-    evaluator = ClassificationEvaluator(MODEL, False)
-    evaluator.evaluate(ground_truth, predicted)
+if not (shift(sys.argv)):
+    print("""[usage]
+    > python eval.py [task]
+    
+    **tasks**
+          -qa : Question Answering
+          -cls: Classification
+    """)
 
 
-# Eval as QA
+elif shift(sys.argv)[0] == "-cls":
+    # Eval as Classification
+
+    with open(os.path.join(BASE_DIR, MODEL + ".json")) as fp:
+        parse = json.load(fp)
+
+        predictions = np.array([data['predicted_diagnosis'] for data in parse])
+
+        ground_truth = np.array([data['ground_truth'].strip() for data in parse])
+        predicted = [p if p else "N/A" for p in predictions]
+
+        evaluator = ClassificationEvaluator(MODEL, False)
+        evaluator.evaluate(ground_truth, predicted)
+
+elif shift(sys.argv)[0] == "-qa":
+    # Eval as QA
+    with open(os.path.join(BASE_DIR, MODEL + "-qa.json")) as fp:
+        parse = json.load(fp)
+
+        predictions = np.array([parse_QA_reponse(data['predicted_diagnosis']) for data in parse])
+
+        ground_truth = np.array([data['ground_truth'].strip() for data in parse])
+        predicted = [p if p else "N/A" for p in predictions]
+
+        evaluator = QAEvaluator(MODEL, False)
+        evaluator.evaluate(ground_truth, predicted)

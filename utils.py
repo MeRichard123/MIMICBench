@@ -1,5 +1,6 @@
 from typing import TypedDict, List
 import random
+import math
 
 Prompt = TypedDict("Prompt", {
     "prompt_id": str,
@@ -36,11 +37,39 @@ def build_classification_prompt(prompt_dict: Prompt, options, add_generation_pro
 
     return prompt
 
-def get_random_choices(correct: str, options: Prompt) -> List[str]:
+def get_random_choices(correct: str, options) -> List[str]:
+    """Return a list of 4 choices (3 random + correct). Handles small option sets.
+
+    - options may be any iterable of keys/choices.
+    - If correct is not in options, we fall back to the first available option.
+    """
+    options_list = list(options)
+
+    # If there are no options, return the correct answer as the sole choice
+    if len(options_list) == 0:
+        return [correct]
+
+    # Ensure correct is a valid choice
+    if correct not in options_list:
+        correct = options_list[0]
+
     choices = []
-    while correct in choices or len(choices) == 0:
-        choices = random.sample(options, k=3) 
-    choices.append(correct)
+    # If fewer than 3 available options, sample with replacement to build 3
+    if len(options_list) < 3:
+        while len(choices) < 3:
+            c = random.choice(options_list)
+            if c not in choices:
+                choices.append(c)
+            else:
+                # allow duplicates only if we can't fill unique ones
+                if len(set(choices)) == len(options_list):
+                    choices.append(c)
+    else:
+        choices = random.sample(options_list, k=3)
+
+    if correct not in choices:
+        choices.append(correct)
+
     random.shuffle(choices)
     return choices
 
@@ -60,9 +89,23 @@ questions = [
 ]
 
 def build_QA_prompt(prompt_dict: Prompt, options):
-    note = prompt_dict["prompt"]
-    correct_option = prompt_dict["ground_truth"]
-    choices = get_random_choices(correct_option, list(options.keys()))
+    # Guard against missing/NaN notes and ground truth values
+    note = prompt_dict.get("prompt", "")
+    correct_option = prompt_dict.get("ground_truth", None)
+
+    try:
+        if note is None or (isinstance(note, float) and math.isnan(note)):
+            note = ""
+    except Exception:
+        pass
+
+    note = str(note)
+
+    option_keys = list(options.keys())
+    if correct_option is None or (isinstance(correct_option, float) and math.isnan(correct_option)):
+        correct_option = option_keys[0] if option_keys else ""
+
+    choices = get_random_choices(correct_option, option_keys)
 
     parts = []
 
