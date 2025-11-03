@@ -4,10 +4,11 @@ import os
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import build_classification_prompt, build_QA_prompt
+from utils import build_classification_prompt, build_QA_prompt, build_open_QA_prompt
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
+import transformers
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = "classification"
+TASK = "open-ended"
 MODEL = "medgemma-4b-it"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
@@ -30,8 +31,16 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     device_map = "auto",
     low_cpu_mem_usage = True,
     offload_folder = os.path.join(os.getcwd(), "offload"),
-    # token=os.getenv("HF_TOKEN")
+    token=os.getenv("HF_TOKEN")
 )
+
+if MODEL == "medgemma-4b-it":
+    # medgemma tokenizer from unsloth is broken so re-load from transformers
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        "google/medgemma-4b-it",
+        use_fast=True,
+        token=os.getenv("HF_TOKEN")
+    )
 
 FastLanguageModel.for_inference(model)
 
@@ -49,6 +58,8 @@ def run_inference(prompt_dict, options):
         prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
     elif TASK == "qa":
         prompt = build_QA_prompt(prompt_dict, options)
+    elif TASK == "open-ended":
+        prompt = build_open_QA_prompt(prompt_dict, options)
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
 
@@ -73,7 +84,7 @@ def run_inference(prompt_dict, options):
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=10, 
+                max_new_tokens= 100 if TASK == "open-ended" else 10, 
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 do_sample=False,

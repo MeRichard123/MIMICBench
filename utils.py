@@ -110,7 +110,7 @@ def build_QA_prompt(prompt_dict: Prompt, options):
     parts = []
 
     system_message = (
-        "You are an expert medical coding assistant. Please provide the correct ICD9 code based "
+        "You are an expert medical coding assistant. Please answer the questions with the correct ICD9 code based "
         "on the medical note and given options."
     )
 
@@ -124,6 +124,50 @@ def build_QA_prompt(prompt_dict: Prompt, options):
     parts.append(random.choice(questions))
     for i, choice in enumerate(choices):
         parts.append(f"{chr(ord('a') + i)}) {choice}: {options[choice]}")
+    
+    prompt = "\n".join(parts)
+    return prompt
+
+open_ended_questions = [
+    "What ICD9 code best reflects the diagnosis in the medical note?",
+    "Based on the details in the medical note, how would you categorize the patient's condition using an ICD9 code?",
+    "Can you provide the appropriate ICD9 code that describes the situation presented in the medical note?",
+    "What ICD9 code would you determine is most applicable for the information detailed in this medical note?",
+    "From your analysis of the medical note, what ICD9 code would you assign, and why?",
+    "Considering the information in the medical note, what would be the most suitable ICD9 code to reflect the diagnosis?",
+    "In your assessment of the medical note, which ICD9 code do you think is the most appropriate, and what factors led you to that conclusion?",
+    "Reflecting on the medical note, what ICD9 code could you suggest to classify the patient’s diagnosis?",
+    "After reviewing the medical note, what ICD9 code comes to mind, and what elements of the note support your answer?",
+    "Taking into account the details provided in the medical note, which ICD9 code would you recommend for medical coding?"
+]
+
+def build_open_QA_prompt(prompt_dict: Prompt, options):
+    # Guard against missing/NaN notes and ground truth values
+    note = prompt_dict.get("prompt", "")
+
+    try:
+        if note is None or (isinstance(note, float) and math.isnan(note)):
+            note = ""
+    except Exception:
+        pass
+
+    note = str(note)
+
+    parts = []
+
+    system_message = (
+        "You are an expert medical coding assistant. Please provide a detailed explanation of the ICD-9 code based on the medical note."
+    )
+
+    parts.append(f"[system] {system_message}")
+    parts.append("[user]")
+    parts.append(f"Medical Note: \n")
+    parts.append("------------------------")
+    parts.append(note)
+    parts.append("------------------------")
+
+    parts.append(random.choice(open_ended_questions))
+
     
     prompt = "\n".join(parts)
     return prompt
