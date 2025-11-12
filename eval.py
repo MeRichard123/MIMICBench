@@ -2,6 +2,7 @@ import os, json, sys
 import numpy as np
 from Evaluation.ClassificationEvaluator import ClassificationEvaluator
 from Evaluation.QAEvaluator import QAEvaluator
+from Evaluation.OQAEValuator import OQAEvaluator
 
 shift = lambda args: args[1:]
 
@@ -66,5 +67,5 @@ match shift(sys.argv)[0]:
         ground_truth = np.array([data['ground_truth'].strip() for data in parse])
         predicted = [p if p else "N/A" for p in predictions]
 
-        evaluator = QAEvaluator(MODEL, False)
+        evaluator = OQAEvaluator(MODEL, False)
         evaluator.evaluate(ground_truth, predicted)

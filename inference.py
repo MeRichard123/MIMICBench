@@ -4,11 +4,17 @@ import os
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
-from utils import build_classification_prompt, build_QA_prompt, build_open_QA_prompt
+from utils import build_classification_prompt, build_QA_prompt, build_open_QA_prompt, load_latest_checkpoint
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
 import transformers
+from enum import Enum
+
+class Tasks(Enum):
+    OQA = 'oqa'
+    CLASS = 'classification'
+    QA = 'qa'
 
 load_dotenv()
 
@@ -19,7 +25,7 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = "open-ended"
+TASK = Tasks.OQA
 MODEL = "medgemma-4b-it"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
@@ -54,11 +60,11 @@ def run_inference(prompt_dict, options):
 
     # Build prompt defensively
 
-    if TASK == "classification":
+    if TASK == Tasks.CLASS:
         prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
-    elif TASK == "qa":
+    elif TASK ==  Tasks.QA:
         prompt = build_QA_prompt(prompt_dict, options)
-    elif TASK == "open-ended":
+    elif TASK == Tasks.OQA:
         prompt = build_open_QA_prompt(prompt_dict, options)
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
@@ -84,7 +90,7 @@ def run_inference(prompt_dict, options):
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens= 100 if TASK == "open-ended" else 10, 
+                max_new_tokens= 100 if TASK == Tasks.OQA else 10, 
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 do_sample=False,
@@ -96,12 +102,14 @@ def run_inference(prompt_dict, options):
         generated_tokens = outputs[0][input_ids.shape[1]:]
         result = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
 
-        # Clean result - remove any assistant tags or extra text
-        result = result.replace('[assistant]', '').strip()
-        if '[system]' in result:
-            result = result.split('[system]')[0].strip()
 
-        result = result.split('\n')[0].split(';')[0].strip()  # Take first part
+        if TASK != Tasks.OQA:
+            # Clean result - remove any assistant tags or extra text
+            result = result.replace('[assistant]', '').strip()
+            if '[system]' in result:
+                result = result.split('[system]')[0].strip()
+
+            result = result.split('\n')[0].split(';')[0].strip()  # Take first part
 
         if logging:
           print(f"Predicted: {result}")
@@ -171,14 +179,29 @@ for i, sample in df_sampled.iterrows():
 results = []
 
 
-for i in tqdm(range(len(classification_prompts))):
-    prompt = classification_prompts[i]
-    obj = {}
-    inference = run_inference(prompt, code_to_title)
-    obj["predicted_diagnosis"] = inference
-    obj["ground_truth"] = prompt["ground_truth"]
-    results.append(obj)
+try:
+    checkpoint = load_latest_checkpoint(MODEL, TASK.value)
+    offset = 0
+    if checkpoint:
+        file = open(checkpoint, "r")
+        json_contents = json.load(file)
+        print(f"LOADED CHECKPOINT {file.name}")
+        results.extend(json_contents)
+        offset = len(json_contents)
 
+    for i in tqdm(range(len(classification_prompts) - offset)):
+        prompt = classification_prompts[i]
+        obj = {}
+        inference = run_inference(prompt, code_to_title)
+        obj["predicted_diagnosis"] = inference
+        obj["ground_truth"] = prompt["ground_truth"]
+        results.append(obj)
 
-with open(f"{MODEL}-{TASK}.json", "w") as f:
-    json.dump(results, f)
+    with open(f"{MODEL}-{TASK.value}.json", "w") as f:
+        json.dump(results, f)
+except KeyboardInterrupt:
+    import datetime
+    now = datetime.datetime.now()
+    timestamp = now.strftime("%Y%m%d-%H%M%S")
+    with open(f"{MODEL}-{TASK.value}-checkpoint-{timestamp}.json", "w") as f:
+        json.dump(results, f)

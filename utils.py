@@ -1,5 +1,5 @@
 from typing import TypedDict, List
-import random
+import random, os, datetime
 import math
 
 Prompt = TypedDict("Prompt", {
@@ -172,3 +172,23 @@ def build_open_QA_prompt(prompt_dict: Prompt, options):
     prompt = "\n".join(parts)
     return prompt
     
+def load_latest_checkpoint(model, task):
+    checkpoint_folder = '/workspaces/CMP9794-Advanced-Artificial-Intelligence/Checkpoints'
+    checkpoint_files = []
+
+    for filename in os.listdir(checkpoint_folder):
+        if filename.startswith(f"{model}-{task}-checkpoint-") and filename.endswith(".json"):
+            file_path = os.path.join(checkpoint_folder, filename)
+            timestamp_str = filename[len(f"{model}-{task}-checkpoint-"):-len(".json")]
+            try:
+                # Adjust the format to match the way we create filenames
+                timestamp = datetime.datetime.strptime(timestamp_str, "%Y%m%d-%H%M%S")
+                checkpoint_files.append((file_path, timestamp))
+            except ValueError:
+                continue  # Skip files that don't match the expected format
+
+    if checkpoint_files:
+        latest_checkpoint = max(checkpoint_files, key=lambda x: x[1])[0]
+        return latest_checkpoint
+    else:
+        return None
