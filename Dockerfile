@@ -7,7 +7,9 @@ RUN conda install -y ipykernel notebook gcc  \
  && pip install bnlearn==0.12.0 pgmpy==0.1.25 gpytorch==1.14 
 RUN conda install -y ipykernel notebook gcc \
  && pip install bnlearn==0.12.0 pgmpy==0.1.25 gpytorch==1.14 \
+ && pip install unsloth==2025.10.8 \
  && conda clean -afy
+
 
 # Install build-essential package which includes GCC and other tools
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
