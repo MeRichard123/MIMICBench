@@ -1,4 +1,3 @@
-unsloth
-seaborn
+evaluate
+rouge
 bert-score
-dotenv
