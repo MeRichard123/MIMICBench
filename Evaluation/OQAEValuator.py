@@ -3,6 +3,9 @@ from bert_score import score as bert_score
 import evaluate
 from nltk.tokenize import word_tokenize
 from rouge import Rouge 
+import nltk
+
+nltk.download('punkt_tab')
 
 import torch
 
@@ -29,7 +32,8 @@ class OQAEvaluator(Evaluator):
         print(f"BERTScore F1: {F1.mean():.4f}")
         print(f"BERTScore Recall: {R.mean():.4f}")
         print(f"BERTScore Precision: {P.mean():.4f}")
-        print(f"ROUGE F1: {R_F:.4f}")
-        print(f"ROUGE Precision: {R_P:.4f}")
-        print(f"ROUGE Recall: {R_R:.4f}")
+        print(f"ROUGE F1: {R_F}")
+        print(f"ROUGE Precision: {R_P}")
+        print(f"ROUGE Recall: {R_R}")
         print(f"BLEU {results['bleu']:.4f}")
+        
