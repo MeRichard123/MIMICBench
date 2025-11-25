@@ -25,11 +25,11 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = Tasks.OQA
-MODEL = "medgemma-4b-it"
+TASK = Tasks.CLASS
+MODEL = "meditron-7b"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "google/medgemma-4b-it",
+    model_name = "epfl-llm/meditron-7b",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
@@ -37,8 +37,16 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     device_map = "auto",
     low_cpu_mem_usage = True,
     offload_folder = os.path.join(os.getcwd(), "offload"),
-    token=os.getenv("HF_TOKEN")
+    token=os.getenv("HF_TOKEN"),
 )
+
+# disable checkpointing for models that don't support it 
+model.config.use_cache = True
+model.config.gradient_checkpointing = False
+if hasattr(model, "gradient_checkpointing_disable"):
+    model.gradient_checkpointing_disable()
+
+model.eval()  # inference mode
 
 if MODEL == "medgemma-4b-it":
     # medgemma tokenizer from unsloth is broken so re-load from transformers
@@ -69,7 +77,6 @@ def run_inference(prompt_dict, options):
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
 
-
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
@@ -81,16 +88,21 @@ def run_inference(prompt_dict, options):
     # Move to same device as model
     input_ids = inputs['input_ids'].to(device)
     attention_mask = inputs.get('attention_mask')
-    if attention_mask is not None:
+    if attention_mask is not None:  
         attention_mask = attention_mask.to(device)
 
     try:
         # Generate response
         with torch.no_grad():
+            forward_out = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )
+        with torch.no_grad():
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens= 100 if TASK == Tasks.OQA else 10, 
+                max_new_tokens=10, 
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 do_sample=False,
@@ -98,9 +110,30 @@ def run_inference(prompt_dict, options):
                 repetition_penalty=1.0,
             )
 
-        # Decode only new tokens
+
+
+        logits = forward_out.logits
+        last_logits = logits[0, -1]
+        probs = torch.softmax(last_logits, dim=-1)
+
         generated_tokens = outputs[0][input_ids.shape[1]:]
         result = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+
+
+        code_token_ids = {
+            code: tokenizer(code, add_special_tokens=False).input_ids
+            for code in options
+        }      
+
+            # Map ICD9 codes → token probs
+        code_probs = {}
+        for code, ids in code_token_ids.items():
+            code_probs[code] = probs[ids[0]].item()
+
+            # # Normalize
+        total = sum(code_probs.values())
+        for c in code_probs:
+            code_probs[c] /= total
 
 
         if TASK != Tasks.OQA:
@@ -112,11 +145,12 @@ def run_inference(prompt_dict, options):
             result = result.split('\n')[0].split(';')[0].strip()  # Take first part
 
         if logging:
-          print(f"Predicted: {result}")
-          print(f"Actual: {prompt_dict['ground_truth']}")
-          print("-" * 50)
+            print(f"Predicted: {result}")
+            print(f"Probability Slice {code_probs}")
+            print(f"Actual: {prompt_dict['ground_truth']}")
+            print("-" * 50)
 
-        return result
+        return result, code_probs
 
     except Exception as e:
         print(f"Model generation failed: {e}")
@@ -192,9 +226,10 @@ try:
     for i in tqdm(range(len(classification_prompts) - offset)):
         prompt = classification_prompts[i]
         obj = {}
-        inference = run_inference(prompt, code_to_title)
+        inference, probs = run_inference(prompt, code_to_title)
         obj["predicted_diagnosis"] = inference
         obj["ground_truth"] = prompt["ground_truth"]
+        obj['probabilities'] = probs
         results.append(obj)
 
     with open(f"{MODEL}-{TASK.value}.json", "w") as f:

@@ -33,16 +33,17 @@ match shift(sys.argv)[0]:
 
     case "-cls":
         # Eval as Classification
-        with open(os.path.join(BASE_DIR, MODEL + ".json")) as fp:
+        with open(os.path.join(BASE_DIR, MODEL + "-classification.json")) as fp:
             parse = json.load(fp)
 
             predictions = np.array([data['predicted_diagnosis'] for data in parse])
-
             ground_truth = np.array([data['ground_truth'].strip() for data in parse])
+            probabilities = np.array([data['probabilities'] for data in parse])
+            
             predicted = [p if p else "N/A" for p in predictions]
 
             evaluator = ClassificationEvaluator(MODEL, False)
-            evaluator.evaluate(ground_truth, predicted)
+            evaluator.evaluate(ground_truth, predicted, probabilities)
 
     case "-qa":
         # Eval as QA

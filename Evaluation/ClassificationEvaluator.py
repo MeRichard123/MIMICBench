@@ -1,14 +1,14 @@
 from Generic.Evaluator import Evaluator
 from sklearn.metrics import (
     f1_score, recall_score, accuracy_score, precision_score, 
-    balanced_accuracy_score, confusion_matrix
+    balanced_accuracy_score, confusion_matrix, brier_score_loss
 )
 from bert_score import score as bert_score
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-import re
+import re, math
 
 
 class ClassificationEvaluator(Evaluator):
@@ -56,9 +56,25 @@ class ClassificationEvaluator(Evaluator):
         """)
 
         return '\n'.join(parts)
+    
 
+    
+    def calculate_kl_divergence(self, predicted_probs, actual_outcome):
+        q = predicted_probs[actual_outcome]     # predicted probability for true class
+        q = max(q, 1e-10)                        # avoid log(0)
 
-    def evaluate(self, ground_truth, predictions):
+        return -np.log(q)
+    
+    def multiclass_brier_score(self, prob_dict, actual_class):
+        # Convert dict to arrays
+        classes = list(prob_dict.keys())
+        y_prob = np.array([prob_dict[c] for c in classes])
+
+        y_true = np.array([1 if c == actual_class else 0 for c in classes])
+
+        return np.sum((y_prob - y_true)**2)
+
+    def evaluate(self, ground_truth, predictions, probs):
         accuracy = accuracy_score(ground_truth, predictions)
         precision = precision_score(ground_truth, predictions, average='weighted', zero_division=1)
         recall = recall_score(ground_truth, predictions, average='weighted', zero_division=1)
@@ -70,10 +86,26 @@ class ClassificationEvaluator(Evaluator):
 
         P, R, F1 = bert_score(list(predictions), list(ground_truth), lang="en", rescale_with_baseline=True)
 
+
+        kl_scores = [
+            self.calculate_kl_divergence(prob_dict, actual)
+            for prob_dict, actual in zip(probs, ground_truth)
+        ]
+        kl_avg = np.mean(kl_scores)
+
+        brier_scores = [
+            self.multiclass_brier_score(prob_dict, actual)
+            for prob_dict, actual in zip(probs, ground_truth)
+        ]
+        brier_score = np.mean(brier_scores)
+
+
         print(f"Accuracy: {accuracy:.4f}")
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
+        print(f"Brier Score: {brier_score:.4f}")
+        print(f"KL Divergence: {kl_avg:.4f}")
         print(f"Balanced Accuracy: {balanced_accuracy:.4f}")
         print(f"BERTScore Precision: {P.mean():.4f}, Recall: {R.mean():.4f}, F1: {F1.mean():.4f}")
         if self.use_as_judge:
