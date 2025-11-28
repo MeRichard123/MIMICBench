@@ -192,3 +192,15 @@ def load_latest_checkpoint(model, task):
         return latest_checkpoint
     else:
         return None
+    
+
+
+class ReferenceImplementation(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
+def reference_impl(func):
+    def inner(*vaargs):
+        raise ReferenceImplementation("This is is a reference implemetation serving as documentation for a function \n that was defined in a different way. This should not be called.")
+    return inner

@@ -1,14 +1,14 @@
 from Generic.Evaluator import Evaluator
 from sklearn.metrics import (
     f1_score, recall_score, accuracy_score, precision_score, 
-    balanced_accuracy_score, confusion_matrix, brier_score_loss
+    balanced_accuracy_score, confusion_matrix
 )
 from bert_score import score as bert_score
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-import re, math
+import re
 
 
 class ClassificationEvaluator(Evaluator):
@@ -56,23 +56,7 @@ class ClassificationEvaluator(Evaluator):
         """)
 
         return '\n'.join(parts)
-    
 
-    
-    def calculate_kl_divergence(self, predicted_probs, actual_outcome):
-        q = predicted_probs[actual_outcome]     # predicted probability for true class
-        q = max(q, 1e-10)                        # avoid log(0)
-
-        return -np.log(q)
-    
-    def multiclass_brier_score(self, prob_dict, actual_class):
-        # Convert dict to arrays
-        classes = list(prob_dict.keys())
-        y_prob = np.array([prob_dict[c] for c in classes])
-
-        y_true = np.array([1 if c == actual_class else 0 for c in classes])
-
-        return np.sum((y_prob - y_true)**2)
 
     def evaluate(self, ground_truth, predictions, probs):
         accuracy = accuracy_score(ground_truth, predictions)

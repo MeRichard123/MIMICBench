@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 import os
 from unsloth import FastLanguageModel
 import torch
-import re
+import re, numpy as np
+from utils import reference_impl
 
 class Evaluator(ABC):
     BASE_DIR = "/workspaces/CMP9794-Advanced-Artificial-Intelligence/"
@@ -83,6 +84,45 @@ class Evaluator(ABC):
             result = result.split("Code:")[-1]
         match = re.search(r"\b[A-Z]\d{1,3}\.?[A-Z0-9]*\b", result)
         return match.group(0).strip() if match else result.strip()
+    
+    @reference_impl
+    def calculate_kl_full(self, predicted_probs, actual_outcome):
+        classes = list(predicted_probs.keys())
+
+        # Construct one-hot true distribution P
+        P = np.array([1.0 if c == actual_outcome else 0.0 for c in classes])
+
+        # Predicted distribution Q
+        Q = np.array([predicted_probs[c] for c in classes])
+        Q = np.clip(Q, 1e-12, 1.0)
+
+        return np.sum(P * np.log(P / Q + 1e-12))    
+
+    """
+    For a single sample, the correct KL divergence for multiclass classification is:
+    D_KL(P∥Q) = ∑_c P(c) log⁡P(c) / Q(c) 
+    
+    But because  P(c∗)=1  for the true class and 0 for all others:
+
+    D_KL = −log⁡ Q(c∗)
+
+    So evaluating KL reduces to negative log likelihood, using the probability assigned to the true class.
+    """
+    
+    def calculate_kl_divergence(self, predicted_probs, actual_outcome):
+        q = predicted_probs[actual_outcome]     # predicted probability for true class
+        q = max(q, 1e-10)                        # avoid log(0)
+
+        return -np.log(q)
+    
+    def multiclass_brier_score(self, prob_dict, actual_class):
+        # Convert dict to arrays
+        classes = list(prob_dict.keys())
+        y_prob = np.array([prob_dict[c] for c in classes])
+
+        y_true = np.array([1 if c == actual_class else 0 for c in classes])
+
+        return np.sum((y_prob - y_true)**2)
     
     @abstractmethod
     def evaluate(self, ground_truth, predictions):

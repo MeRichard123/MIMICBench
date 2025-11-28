@@ -54,9 +54,10 @@ match shift(sys.argv)[0]:
 
         ground_truth = np.array([data['ground_truth'].strip() for data in parse])
         predicted = [p if p else "N/A" for p in predictions]
+        probabilities = np.array([data['probabilities'] for data in parse])
 
         evaluator = QAEvaluator(MODEL, False)
-        evaluator.evaluate(ground_truth, predicted)
+        evaluator.evaluate(ground_truth, predicted, probabilities)
 
     case "-oqa":
         # Eval as Open QA

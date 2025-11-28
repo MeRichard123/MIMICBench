@@ -39,7 +39,7 @@ class QAEvaluator(Evaluator):
                 ranks.append(0)
         return np.mean(ranks)
 
-    def evaluate(self, ground_truth, predictions):
+    def evaluate(self, ground_truth, predictions, probs):
         exact_matches = sum(gt == pred for gt, pred in zip(ground_truth, predictions))
         em = exact_matches / len(ground_truth) if len(ground_truth) > 0 else 0 
 
@@ -50,6 +50,19 @@ class QAEvaluator(Evaluator):
         P, R, F1 = bert_score(list(predictions), list(ground_truth), lang="en", rescale_with_baseline=True)
 
 
+        kl_scores = [
+            self.calculate_kl_divergence(prob_dict, actual)
+            for prob_dict, actual in zip(probs, ground_truth)
+        ]
+        kl_avg = np.mean(kl_scores)
+
+        brier_scores = [
+            self.multiclass_brier_score(prob_dict, actual)
+            for prob_dict, actual in zip(probs, ground_truth)
+        ]
+        brier_score = np.mean(brier_scores)
+
+
         P = torch.tensor(P) if isinstance(P, (tuple, str)) else P
         R = torch.tensor(R) if isinstance(R, (tuple, str)) else R
         F1 = torch.tensor(F1) if isinstance(F1, (tuple, str)) else F1
@@ -58,6 +71,8 @@ class QAEvaluator(Evaluator):
         print(f"F1 Score {f1:.4f}")
         print(f"Balanced Accuracy: {balanced_accuracy:.4f}")
         print(f"Mean Reciprocal Rank: {mrr:.4f}")
+        print(f"Brier Score: {brier_score:.4f}")
+        print(f"KL-Divergence: {kl_avg:.4f}")
         print(f"BERTScore F1: {F1.mean():.4f}")
         print(f"BERTScore Recall: {R.mean():.4f}")
         print(f"BERTScore Precision: {P.mean():.4f}")

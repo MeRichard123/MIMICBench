@@ -25,7 +25,7 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = Tasks.CLASS
+TASK = Tasks.QA
 MODEL = "meditron-7b"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
@@ -109,7 +109,6 @@ def run_inference(prompt_dict, options):
                 temperature=0.1,
                 repetition_penalty=1.0,
             )
-
 
 
         logits = forward_out.logits
