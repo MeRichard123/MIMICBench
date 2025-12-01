@@ -1,19 +1,18 @@
 import torch
 from unsloth import FastLanguageModel
 import os
-import gc
-import pandas as pd
-import matplotlib.pyplot as plt
-from utils import build_classification_prompt, build_QA_prompt, build_open_QA_prompt, load_latest_checkpoint
+from utils import build_classification_prompt, build_MCQA_prompt, build_open_QA_prompt, build_QA_prompt, load_latest_checkpoint
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
 import transformers
 from enum import Enum
+from DataLoader import DataLoader, Dataset_t
 
 class Tasks(Enum):
     OQA = 'oqa'
     CLASS = 'classification'
+    MCQA = 'mcqa'
     QA = 'qa'
 
 load_dotenv()
@@ -25,7 +24,7 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = Tasks.QA
+TASK = Tasks.CLASS
 MODEL = "meditron-7b"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
@@ -70,10 +69,12 @@ def run_inference(prompt_dict, options):
 
     if TASK == Tasks.CLASS:
         prompt = build_classification_prompt(prompt_dict, options, add_generation_prompt=True)
-    elif TASK ==  Tasks.QA:
-        prompt = build_QA_prompt(prompt_dict, options)
+    elif TASK ==  Tasks.MCQA:
+        prompt = build_MCQA_prompt(prompt_dict, options)
     elif TASK == Tasks.OQA:
         prompt = build_open_QA_prompt(prompt_dict, options)
+    elif TASK == Tasks.QA:
+        prompt = build_QA_prompt(prompt_dict)
     else:
         raise ValueError(f"Unknown TASK: {TASK}")
 
@@ -124,7 +125,7 @@ def run_inference(prompt_dict, options):
             for code in options
         }      
 
-            # Map ICD9 codes → token probs
+        # Map ICD9 codes → token probs
         code_probs = {}
         for code, ids in code_token_ids.items():
             code_probs[code] = probs[ids[0]].item()
@@ -156,61 +157,31 @@ def run_inference(prompt_dict, options):
         return None
 
 
-df = pd.read_csv("/workspaces/CMP9794-Advanced-Artificial-Intelligence/MIMIC-SAMPLED.csv")
+dataset = DataLoader(Dataset_t.JSON)
+df_sampled = dataset.data
 
-null_rows = df[df.isnull().any(axis=1)]
-print(null_rows.shape)
-df.isnull().sum()
-
-df_copy = df.copy()
-df_copy.dropna(subset=["ICD9 Diagnosis"], inplace=True)
-df_copy.dropna(subset=["note_category"], inplace=True)
-df_copy.isnull().sum()
-
-# Calculate the number of rows in the original and modified dataframes
-original_rows = df.shape[0]
-dropped_rows = original_rows - df_copy.shape[0]
-not_dropped_rows = df_copy.shape[0]
-
-# Create labels and sizes for the pie chart
-labels = ['Dropped Rows', 'Not Dropped Rows']
-sizes = [dropped_rows, not_dropped_rows]
-colors = ['#ff9999','#66b3da']
-explode = (0.1, 0)  # explode 1st slice
-
-# Create the pie chart
-plt.figure(figsize=(5, 5))
-plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
-plt.axis('equal')
-plt.title('Proportion of Dropped vs Not Dropped Rows')
-plt.savefig("DroppedPie.png")
-
-
-df_sampled = df_copy.sample(n=1312, random_state=42) # Shuffle
-print(df_sampled.head())
-
-unique_pairs = df[['ICD9 Diagnosis', 'SHORT_TITLE']].drop_duplicates()
-code_to_title = dict(unique_pairs.values)
-
-
-df_sampled = df_sampled.reset_index()
-classification_prompts = []
-labels = []  # For ground truth
+prompts = []
 
 for i, sample in df_sampled.iterrows():
-    diagnosis = sample["ICD9 Diagnosis"]
-    note = sample["Note"]
+    if dataset.dataset_t == Dataset_t.CSV:
+        diagnosis = sample["ICD9 Diagnosis"]
+        note = sample["Note"]
 
-    classification_prompts.append({
-        "prompt_id": f"classify_{i}",
-        "prompt": note,
-        "ground_truth": diagnosis,
-        "note": note
-    })
-    labels.append(diagnosis)
+        prompts.append({
+            "prompt_id": f"classify_{i}",
+            "prompt": note,
+            "ground_truth": diagnosis,
+        })
+    elif dataset.dataset_t == Dataset_t.JSON:
+        prompts.append({
+            'prompt_id': f"qa_{i}",
+            'prompt': sample["context"],
+            'question': sample['question'],
+            'ground_truth': sample['answer_text']
+        })
+        
 
 results = []
-
 
 try:
     checkpoint = load_latest_checkpoint(MODEL, TASK.value)
@@ -222,10 +193,10 @@ try:
         results.extend(json_contents)
         offset = len(json_contents)
 
-    for i in tqdm(range(len(classification_prompts) - offset)):
-        prompt = classification_prompts[i]
+    for i in tqdm(range(len(prompts) - offset)):
+        prompt = prompts[i]
         obj = {}
-        inference, probs = run_inference(prompt, code_to_title)
+        inference, probs = run_inference(prompt, dataset.code_to_title)
         obj["predicted_diagnosis"] = inference
         obj["ground_truth"] = prompt["ground_truth"]
         obj['probabilities'] = probs
@@ -233,6 +204,7 @@ try:
 
     with open(f"{MODEL}-{TASK.value}.json", "w") as f:
         json.dump(results, f)
+
 except KeyboardInterrupt:
     import datetime
     now = datetime.datetime.now()

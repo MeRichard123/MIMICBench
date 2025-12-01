@@ -1,4 +1,4 @@
-from typing import TypedDict, List
+from typing import TypedDict, List, NotRequired
 import random, os, datetime
 import math
 
@@ -6,7 +6,7 @@ Prompt = TypedDict("Prompt", {
     "prompt_id": str,
     "prompt": str,
     "ground_truth": str,
-    "note": str
+    "question": NotRequired[str]
 })
 
 def build_classification_prompt(prompt_dict: Prompt, options, add_generation_prompt=True):
@@ -88,7 +88,7 @@ questions = [
     "Given the medical note, which ICD9 code should be assigned?"
 ]
 
-def build_QA_prompt(prompt_dict: Prompt, options):
+def build_MCQA_prompt(prompt_dict: Prompt, options):
     # Guard against missing/NaN notes and ground truth values
     note = prompt_dict.get("prompt", "")
     correct_option = prompt_dict.get("ground_truth", None)
@@ -126,6 +126,27 @@ def build_QA_prompt(prompt_dict: Prompt, options):
         parts.append(f"{chr(ord('a') + i)}) {choice}: {options[choice]}")
     
     prompt = "\n".join(parts)
+    return prompt
+
+def build_QA_prompt(prompt_dict: Prompt):
+    context = prompt_dict.get('prompt')
+    question = prompt_dict.get('question', '')
+
+    parts = []
+
+    system_message = (
+        "You are an expert medical coding assistant. Please answer the questions with the correct answer based "
+        "on the provided context."
+    )
+
+    parts.append(f"[system] {system_message}")
+    parts.append("[context]")
+    parts.append("------------------------")
+    parts.append(context)
+    parts.append("------------------------")
+    parts.append(question)
+
+    prompt = '\n'.join(parts)
     return prompt
 
 open_ended_questions = [

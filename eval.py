@@ -23,7 +23,7 @@ if not (shift(sys.argv)):
     > python eval.py [task]
     
     **tasks**
-          -qa : Question Answering
+          -mcqa : Multi Choice Question Answering
           -cls: Classification
           -oqa: Open Question Answering
     """)
@@ -45,9 +45,9 @@ match shift(sys.argv)[0]:
             evaluator = ClassificationEvaluator(MODEL, False)
             evaluator.evaluate(ground_truth, predicted, probabilities)
 
-    case "-qa":
+    case "-mcqa":
         # Eval as QA
-        with open(os.path.join(BASE_DIR, MODEL + "-qa.json")) as fp:
+        with open(os.path.join(BASE_DIR, MODEL + "-mcqa.json")) as fp:
             parse = json.load(fp)
 
         predictions = np.array([parse_QA_reponse(data['predicted_diagnosis']) for data in parse])
