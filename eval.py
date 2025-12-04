@@ -16,7 +16,7 @@ def parse_QA_reponse(text):
     return text.strip()
 
 BASE_DIR = "/workspaces/CMP9794-Advanced-Artificial-Intelligence/Results/"
-MODEL = "meditron-7b"
+MODEL = "medical-coding-llm"
 
 if not (shift(sys.argv)):
     print("""[usage]
@@ -25,7 +25,7 @@ if not (shift(sys.argv)):
     **tasks**
           -mcqa : Multi Choice Question Answering
           -cls: Classification
-          -oqa: Open Question Answering
+          -qa: Open Question Answering
     """)
 
 
@@ -59,15 +59,16 @@ match shift(sys.argv)[0]:
         evaluator = QAEvaluator(MODEL, False)
         evaluator.evaluate(ground_truth, predicted, probabilities)
 
-    case "-oqa":
+    case "-qa":
         # Eval as Open QA
-        with open(os.path.join(BASE_DIR, MODEL + "-oqa.json")) as fp:
+        with open(os.path.join(BASE_DIR, MODEL + "-qa.json")) as fp:
             parse = json.load(fp)
 
         predictions = np.array([data['predicted_diagnosis'] for data in parse])
-
+        probabilities = np.array([data['probabilities'] for data in parse])
         ground_truth = np.array([data['ground_truth'].strip() for data in parse])
         predicted = [p if p else "N/A" for p in predictions]
+        predicted = ['N/A' if p == '?' else p for p in predicted]
 
         evaluator = OQAEvaluator(MODEL, False)
-        evaluator.evaluate(ground_truth, predicted)
+        evaluator.evaluate(ground_truth, predicted, probabilities)

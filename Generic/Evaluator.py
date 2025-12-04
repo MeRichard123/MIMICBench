@@ -10,9 +10,9 @@ class Evaluator(ABC):
     BASE_DIR = "/workspaces/CMP9794-Advanced-Artificial-Intelligence/"
     def __init__(self, model, use_as_judge):
         self.DATA_MODEL = model
-        self.__pairs = Evaluator.get_pair_dictionary()
 
         if use_as_judge:
+            self.__pairs = Evaluator.get_pair_dictionary()
             self.model, self.tokenizer = FastLanguageModel.from_pretrained(
                 model_name = "openai/gpt-oss-20b",
                 dtype = None,
@@ -110,20 +110,27 @@ class Evaluator(ABC):
     """
     
     def calculate_kl_divergence(self, predicted_probs, actual_outcome):
-        q = predicted_probs[actual_outcome]     # predicted probability for true class
-        q = max(q, 1e-10)                        # avoid log(0)
+        if isinstance(predicted_probs, dict) and 'type' not in predicted_probs:
+            q = predicted_probs[actual_outcome]     # predicted probability for true class
+            q = max(q, 1e-10)                        # avoid log(0)
 
-        return -np.log(q)
+            return -np.log(q)
+        else:
+            gt_logprob = predicted_probs.get('ground_truth_logprob')
+            return -gt_logprob
     
     def multiclass_brier_score(self, prob_dict, actual_class):
         # Convert dict to arrays
-        classes = list(prob_dict.keys())
-        y_prob = np.array([prob_dict[c] for c in classes])
+        if isinstance(prob_dict, dict) and 'type' not in prob_dict:
+            classes = list(prob_dict.keys())
+            y_prob = np.array([prob_dict[c] for c in classes])
 
-        y_true = np.array([1 if c == actual_class else 0 for c in classes])
+            y_true = np.array([1 if c == actual_class else 0 for c in classes])
 
-        return np.sum((y_prob - y_true)**2)
-    
+            return np.sum((y_prob - y_true)**2)
+        else:
+            return None # no Brier for Open Ended Tasks
+        
     @abstractmethod
     def evaluate(self, ground_truth, predictions):
         return

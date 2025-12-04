@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import transformers
 from enum import Enum
 from DataLoader import DataLoader, Dataset_t
+import numpy as np
 
 class Tasks(Enum):
     OQA = 'oqa'
@@ -24,11 +25,11 @@ load_dotenv()
 # epfl-llm/meditron-7b
 # haohao12/qwen2.5-7b-medical
 
-TASK = Tasks.CLASS
-MODEL = "meditron-7b"
+TASK = Tasks.QA
+MODEL = "medical-coding-llm"
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "epfl-llm/meditron-7b",
+    model_name = "Kavyaah/medical-coding-llm",
     dtype = None,
     max_seq_length = 4096,
     load_in_4bit = True,
@@ -114,78 +115,118 @@ def run_inference(prompt_dict, options):
                 output_scores = True
             )
 
-        generated_ids = outputs.sequence[0, input_ids.shape[1]:]
-        generated_token_count = len(generated_ids)
+            generated_ids = outputs.sequences[0, input_ids.shape[1]:]
+            generated_token_count = len(generated_ids)
 
-        if generated_token_count == 0:
-            predicted_text = ''
-            generated_logprob = -100.0
-        else:
-            predicted_text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+            if generated_token_count == 0:
+                predicted_text = ''
+                generated_logprob = -100.0
+            else:
+                predicted_text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
-            transition_scores = model.compute_transition_scores(
-                outputs.sequences,
-                outputs.scores,
-                normalize_logits=True
-            )
+                transition_scores = model.compute_transition_scores(
+                    outputs.sequences,
+                    outputs.scores,
+                    normalize_logits=True
+                )
 
-            gen_scores = transition_scores[0, :generated_token_count]
+                gen_scores = transition_scores[0, :generated_token_count]
+                generated_logprob = float(gen_scores.sum().item())
 
+            if TASK in [Tasks.CLASS, Tasks.MCQA]:
+                predicted_text = predicted_text.split('\n')[0].split(';')[0].strip()
+        
         if TASK in [Tasks.CLASS, Tasks.MCQA]:
-            predicted_text = predicted_text.split('\n')[0].split(';')[0].strip()
+            if generated_token_count == 0:
+                probabilities = {opt: 1.0 / len(options) for opt in options}
+            else: 
+                first_logits = outputs.scores[0][0]
+                first_probs = torch.softmax(first_logits, dim=-1)
 
+                prob_dict = {}
+                for opt in options:
+                    token_ids = tokenizer(opt, add_special_tokens=False).input_ids
+                    if token_ids:
+                        prob_dict[opt] = first_probs[token_ids[0]].item()
+                    else:
+                        prob_dict[opt] = 0.0
+                total = sum(prob_dict.values())
+                probabilities = {
+                    k: v / total if total >0 else 1 / len(options)
+                    for k, v in prob_dict.items()
+                }
 
-        logits = forward_out.logits
-        last_logits = logits[0, -1]
-        probs = torch.softmax(last_logits, dim=-1)
+        elif TASK in [Tasks.QA, Tasks.OQA]:
+            ground_truth = prompt_dict.get("ground_truth")
 
-        generated_tokens = outputs[0][input_ids.shape[1]:]
-        result = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+            if ground_truth:
+                gt_ids = tokenizer(ground_truth, add_special_tokens=False).input_ids
+                if len(gt_ids) > 0:
+                    forced_ids = torch.cat([input_ids, ], dim=-1)
+                    gt_tensor = torch.tensor(gt_ids, device=device).unsqueeze(0)
+                    forced_ids = torch.cat([forced_ids, gt_tensor], dim=1)
 
-        code_token_ids = {
-            code: tokenizer(code, add_special_tokens=False).input_ids
-            for code in options
-        }      
+                    with torch.no_grad():
+                        out = model(forced_ids)
+                        logits = out.logits[0, input_ids.shape[1]-1 : input_ids.shape[1]-1 + len(gt_ids), :]
+                        log_probs = torch.log_softmax(logits, dim=-1)
 
-        # Map ICD9 codes → token probs
-        code_probs = {}
-        for code, ids in code_token_ids.items():
-            code_probs[code] = probs[ids[0]].item()
-
-            # # Normalize
-        total = sum(code_probs.values())
-        for c in code_probs:
-            code_probs[c] /= total
+                        gt_logprob = 0.0
+                        for i, token_id in enumerate(gt_ids):
+                            gt_logprob += log_probs[i, token_id].item()
+                        ground_truth_logprob = float(gt_logprob)
+                else:
+                    ground_truth_logprob = 0.0
+            else:
+                ground_truth_logprob = None
+            probabilities = {
+                "type": "open_generation",
+                "predicted_text": predicted_text,
+                "predicted_logprob": generated_logprob if generated_logprob is not None else -100.0,
+                "predicted_perplexity": (
+                    np.exp(-generated_logprob / max(generated_token_count, 1))
+                    if generated_logprob is not None and generated_token_count > 0
+                    else 1e6
+                ),
+                "generated_token_count": generated_token_count,
+                "ground_truth_logprob": ground_truth_logprob,
+                "ground_truth_perplexity": (
+                    np.exp(-ground_truth_logprob / len(gt_ids))
+                    if ground_truth_logprob is not None and len(gt_ids) > 0
+                    else None
+                ) if ground_truth else None,
+            }
 
 
         if TASK != Tasks.OQA:
             # Clean result - remove any assistant tags or extra text
-            result = result.replace('[assistant]', '').strip()
-            if '[system]' in result:
-                result = result.split('[system]')[0].strip()
+            predicted_text = predicted_text.replace('[assistant]', '').strip()
+            if '[system]' in predicted_text:
+                predicted_text = predicted_text.split('[system]')[0].strip()
 
-            result = result.split('\n')[0].split(';')[0].strip()  # Take first part
-
+            predicted_text = predicted_text.split('\n')[0].split(';')[0].strip()  # Take first part
+            
         if logging:
-            print(f"Predicted: {result}")
-            print(f"Probability Slice {code_probs}")
+            print(f"Predicted: {predicted_text}")
+            print(f"Probability Slice {probabilities}")
             print(f"Actual: {prompt_dict['ground_truth']}")
             print("-" * 50)
 
-        return result, code_probs
+        return predicted_text, probabilities
 
     except Exception as e:
         print(f"Model generation failed: {e}")
         return None
 
 
-dataset = DataLoader(Dataset_t.CSV)
+dataset = DataLoader(Dataset_t.JSON)
 df_sampled = dataset.data
 
 prompts = []
 
 for i, sample in df_sampled.iterrows():
     if dataset.dataset_t == Dataset_t.CSV:
+        assert TASK != Tasks.QA, "You are loading CSV but code is assuming JSON"
         diagnosis = sample["ICD9 Diagnosis"]
         note = sample["Note"]
 

@@ -129,8 +129,8 @@ def build_MCQA_prompt(prompt_dict: Prompt, options):
     return prompt
 
 def build_QA_prompt(prompt_dict: Prompt):
-    context = prompt_dict.get('prompt')
-    question = prompt_dict.get('question', '')
+    context = str(prompt_dict.get('prompt'))
+    question = str(prompt_dict.get('question', ''))
 
     parts = []
 

@@ -73,7 +73,7 @@ class QAEvaluator(Evaluator):
         print(f"Mean Reciprocal Rank: {mrr:.4f}")
         print(f"Brier Score: {brier_score:.4f}")
         print(f"KL-Divergence: {kl_avg:.4f}")
-        print(f"BERTScore F1: {F1.mean():.4f}")
-        print(f"BERTScore Recall: {R.mean():.4f}")
-        print(f"BERTScore Precision: {P.mean():.4f}")
+        print(f"BERTScore F1: {F1.mean():.4f} ± {np.std(F1):.4f}")
+        print(f"BERTScore Recall: {R.mean():.4f} ± {np.std(R):.4f}")
+        print(f"BERTScore Precision: {P.mean():.4f} ± {np.nanstd(P):.4f}")
 
