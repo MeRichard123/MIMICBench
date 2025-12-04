@@ -192,6 +192,8 @@ def build_open_QA_prompt(prompt_dict: Prompt, options):
     
     prompt = "\n".join(parts)
     return prompt
+
+
     
 def load_latest_checkpoint(model, task):
     checkpoint_folder = '/workspaces/CMP9794-Advanced-Artificial-Intelligence/Checkpoints'

@@ -81,7 +81,7 @@ def run_inference(prompt_dict, options):
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
-        padding=False,
+        padding=True,
         truncation=True,
         max_length=2048
     )
@@ -92,14 +92,13 @@ def run_inference(prompt_dict, options):
     if attention_mask is not None:  
         attention_mask = attention_mask.to(device)
 
-    predicted_text = ""
-    probabilities = {}
-    generated_logprob = None
-    ground_truth_logprob = None
-    generated_token_count = 0
-
     try:
         # Generate response
+        with torch.no_grad():
+            forward_out = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )
         with torch.no_grad():
             outputs = model.generate(
                 input_ids=input_ids,
@@ -110,29 +109,7 @@ def run_inference(prompt_dict, options):
                 do_sample=False,
                 temperature=0.1,
                 repetition_penalty=1.0,
-                return_dict_in_generate=True,
-                output_scores = True
             )
-
-        generated_ids = outputs.sequence[0, input_ids.shape[1]:]
-        generated_token_count = len(generated_ids)
-
-        if generated_token_count == 0:
-            predicted_text = ''
-            generated_logprob = -100.0
-        else:
-            predicted_text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-
-            transition_scores = model.compute_transition_scores(
-                outputs.sequences,
-                outputs.scores,
-                normalize_logits=True
-            )
-
-            gen_scores = transition_scores[0, :generated_token_count]
-
-        if TASK in [Tasks.CLASS, Tasks.MCQA]:
-            predicted_text = predicted_text.split('\n')[0].split(';')[0].strip()
 
 
         logits = forward_out.logits
@@ -141,6 +118,7 @@ def run_inference(prompt_dict, options):
 
         generated_tokens = outputs[0][input_ids.shape[1]:]
         result = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+
 
         code_token_ids = {
             code: tokenizer(code, add_special_tokens=False).input_ids
@@ -179,7 +157,7 @@ def run_inference(prompt_dict, options):
         return None
 
 
-dataset = DataLoader(Dataset_t.CSV)
+dataset = DataLoader(Dataset_t.JSON)
 df_sampled = dataset.data
 
 prompts = []
